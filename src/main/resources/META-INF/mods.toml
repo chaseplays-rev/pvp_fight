@@ -1,0 +1,27 @@
+modLoader="javafml"  
+loaderVersion="[47,)"  
+license="All rights reserved"  
+
+[[mods]]
+modId="pvpfight"
+version="1.0.0"
+displayName="PvP Fight"
+authors="YourNameHere"
+description=''' 
+A competitive arena PvP mod that manages player fights, arenas, and protection zones.
+'''
+
+# Optional: dependencies
+[[dependencies.pvpfight]]
+    modId="forge"
+    mandatory=true
+    versionRange="[47,)"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.pvpfight]]
+    modId="minecraft"
+    mandatory=true
+    versionRange="[1.20.1,1.21)"
+    ordering="NONE"
+    side="BOTH"
