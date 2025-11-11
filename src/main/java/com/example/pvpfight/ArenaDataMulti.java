@@ -24,19 +24,15 @@ import java.util.concurrent.ConcurrentHashMap;
 public class ArenaDataMulti {
 
     private static final Logger LOGGER = LogUtils.getLogger();
-    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
+    private static final Gson GSON = new GsonBuilder()
+            .setPrettyPrinting()
+            .disableHtmlEscaping()
+            .create();
     private static final File ARENA_FILE = new File("config/pvpfight/arenas.json");
 
     // Thread-safe map for all arenas
     private static final Map<String, ArenaData> ARENAS = new ConcurrentHashMap<>();
 
-    // =========================================================
-    // === ADMIN COMMAND METHODS
-    // =========================================================
-
-    /**
-     * Creates a new arena with the given name.
-     */
     public void createArena(ServerPlayer admin, String name) {
         if (name == null || name.isEmpty()) {
             if (admin != null)
@@ -124,7 +120,6 @@ public class ArenaDataMulti {
             admin.sendSystemMessage(Component.literal("§7You must set both corners and both spawns before finalizing."));
             return;
         }
-
         saveArenas();
         admin.sendSystemMessage(Component.literal("§aArena §6" + name + " §ahas been finalized and saved!"));
         LOGGER.info("[ArenaDataMulti] Arena '{}' finalized and saved successfully.", name);
@@ -236,51 +231,99 @@ public class ArenaDataMulti {
         return lastArena;
     }
 
-    // =========================================================
-    // === PERSISTENCE
-    // =========================================================
-
     public static void loadArenas() {
-        try {
-            if (!ARENA_FILE.exists()) {
-                saveArenas();
-                return;
-            }
+        final File file = ARENA_FILE;
 
-            Type listType = new TypeToken<List<ArenaData>>() {}.getType();
-            List<ArenaData> loaded = GSON.fromJson(new FileReader(ARENA_FILE), listType);
+        if (!file.exists()) {
+            LOGGER.info("[ArenaDataMulti] Arenas file not found at {} (starting empty).", file.getAbsolutePath());
+            ARENAS.clear();
+            return;
+        }
+
+        try (var reader = new java.io.InputStreamReader(
+                new java.io.FileInputStream(file),
+                java.nio.charset.StandardCharsets.UTF_8)) {
+
+            com.google.gson.JsonElement root = com.google.gson.JsonParser.parseReader(reader);
+            java.util.Map<String, ArenaData> temp = new java.util.HashMap<>();
+
+            if (root == null || root.isJsonNull()) {
+                LOGGER.warn("[ArenaDataMulti] Empty/null JSON at {}", file.getAbsolutePath());
+            } else if (root.isJsonArray()) {
+                // Case A: bare array
+                var arr = root.getAsJsonArray();
+                for (var el : arr) {
+                    ArenaData a = GSON.fromJson(el, ArenaData.class);
+                    if (a != null && a.getName() != null && !a.getName().isBlank()) {
+                        temp.put(a.getName().toLowerCase(java.util.Locale.ROOT), a);
+                    }
+                }
+            } else if (root.isJsonObject()) {
+                var obj = root.getAsJsonObject();
+
+                // Case B: root-wrapped array: { "arenas": [ ... ] }
+                if (obj.has("arenas") && obj.get("arenas").isJsonArray()) {
+                    var arr = obj.getAsJsonArray("arenas");
+                    for (var el : arr) {
+                        ArenaData a = GSON.fromJson(el, ArenaData.class);
+                        if (a != null && a.getName() != null && !a.getName().isBlank()) {
+                            temp.put(a.getName().toLowerCase(java.util.Locale.ROOT), a);
+                        }
+                    }
+                } else {
+                    // Case C: map: { "duel": {ArenaData}, "pit": {ArenaData} }
+                    for (var entry : obj.entrySet()) {
+                        String keyName = entry.getKey();
+                        ArenaData a = GSON.fromJson(entry.getValue(), ArenaData.class);
+                        if (a != null) {
+                            // If JSON omitted "name", use the map key
+                            if (a.getName() == null || a.getName().isBlank()) {
+                                try {
+                                    java.lang.reflect.Field f = ArenaData.class.getDeclaredField("name");
+                                    f.setAccessible(true);
+                                    f.set(a, keyName);
+                                } catch (Exception ignore) { /* fallback below */ }
+                            }
+                            String finalName = (a.getName() != null && !a.getName().isBlank()) ? a.getName() : keyName;
+                            temp.put(finalName.toLowerCase(java.util.Locale.ROOT), a);
+                        }
+                    }
+                }
+            } else {
+                LOGGER.error("[ArenaDataMulti] Unsupported JSON root at {}: {}", file.getAbsolutePath(), root.getClass());
+            }
 
             ARENAS.clear();
-            for (ArenaData arena : loaded) {
-                ARENAS.put(arena.getName().toLowerCase(), arena);
-            }
+            ARENAS.putAll(temp);
+            LOGGER.info("[ArenaDataMulti] Loaded {} arenas from {}.", ARENAS.size(), file.getAbsolutePath());
 
-            LOGGER.info("[ArenaDataMulti] Loaded {} arenas.", ARENAS.size());
+        } catch (com.google.gson.JsonSyntaxException js) {
+            LOGGER.error("[ArenaDataMulti] JSON syntax error at {}.", file.getAbsolutePath(), js);
         } catch (Exception e) {
-            LOGGER.error("[ArenaDataMulti] Error loading arenas: {}", e.getMessage());
+            LOGGER.error("[ArenaDataMulti] Error loading arenas from {}.", file.getAbsolutePath(), e);
         }
     }
+
 
     public static void saveArenas() {
         try {
             File dir = ARENA_FILE.getParentFile();
-            if (!dir.exists()) dir.mkdirs();
-
+            if (!dir.exists() && !dir.mkdirs()) {
+                LOGGER.error("[ArenaDataMulti] Could not create config directory: {}", dir);
+                return;
+            }
             List<ArenaData> arenasToSave = new ArrayList<>(ARENAS.values());
-            FileWriter writer = new FileWriter(ARENA_FILE);
-            GSON.toJson(arenasToSave, writer);
-            writer.flush();
-            writer.close();
-
-            LOGGER.info("[ArenaDataMulti] Saved {} arenas.", arenasToSave.size());
+            try (var writer = new java.io.OutputStreamWriter(
+                    new java.io.FileOutputStream(ARENA_FILE),
+                    java.nio.charset.StandardCharsets.UTF_8)) {
+                GSON.toJson(arenasToSave, writer); // or write the Map, see D)
+            }
+            LOGGER.info("[ArenaDataMulti] Saved {} arenas to {}", arenasToSave.size(), ARENA_FILE.getAbsolutePath());
         } catch (Exception e) {
-            LOGGER.error("[ArenaDataMulti] Error saving arenas: {}", e.getMessage());
+            LOGGER.error("[ArenaDataMulti] Error saving arenas", e);
         }
     }
 
-    public static void clearAll() {
-        ARENAS.clear();
-        saveArenas();
-        LOGGER.info("[ArenaDataMulti] All arenas cleared from memory.");
-    }
+
+
 }

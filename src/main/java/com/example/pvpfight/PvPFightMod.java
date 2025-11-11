@@ -16,7 +16,6 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 
 @Mod(PvPFightMod.MODID)
 @Mod.EventBusSubscriber(modid = PvPFightMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
-    
     public class PvPFightMod {
 
         public static final String MODID = "pvpfight";
@@ -85,30 +84,13 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
             Config.winnerItem.set(cfg.winnerItem);
             Config.loserItem.set(cfg.loserItem);
 
-            // Load all arenas from file
-            ArenaDataMulti.loadArenas();
-
-            // Load the saved lobby position
-            LobbyManager.loadLobby();
-
             LOGGER.info("[PvPFight] All configurations, arenas, and lobby loaded successfully.");
         } catch (Exception e) {
             LOGGER.error("[PvPFight] Error during server startup: {}", e.getMessage());
             e.printStackTrace();
         }
-    }
+        ArenaDataMulti.loadArenas();
 
-
-    // 🧹 Server Stopping / Cleanup
-    @SubscribeEvent
-    public static void onServerStopping(ServerStoppingEvent event) {
-        LOGGER.info("[PvPFight] Server is stopping. Cleaning up managers...");
-        if (fightManager != null) {
-            arenaDataMulti.clearAll();
-        }
-        if (lobbyManager != null) {
-            lobbyManager.clear();
-        }
-        LOGGER.info("[PvPFight] Cleanup complete.");
+        LobbyManager.loadLobby();
     }
 }

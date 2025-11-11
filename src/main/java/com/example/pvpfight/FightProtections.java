@@ -4,6 +4,7 @@ import com.mojang.logging.LogUtils;
 import net.minecraft.ChatFormatting;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.damagesource.DamageSource;
@@ -11,9 +12,11 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.GameType;
 import net.minecraftforge.event.TickEvent;
+import net.minecraftforge.event.entity.EntityJoinLevelEvent;
 import net.minecraftforge.event.entity.item.ItemTossEvent;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
+import net.minecraftforge.event.entity.living.LivingEquipmentChangeEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.level.BlockEvent;
@@ -35,7 +38,7 @@ import java.util.List;
  *  - Cleans up arenas after fights
  *  - Deletes leftover tagged items when inventories open
  */
-@Mod.EventBusSubscriber
+@Mod.EventBusSubscriber(modid = PvPFightMod.MODID)
 public class FightProtections {
 
     private static final Logger LOGGER = LogUtils.getLogger();
@@ -62,19 +65,18 @@ public class FightProtections {
         }
     }
 
+
+
     /** Prevents dropping items outside the arena bounds. */
     @SubscribeEvent
     public static void onItemToss(ItemTossEvent event) {
+        if(event.getPlayer().level().isClientSide()) return;
         ServerPlayer sp = (ServerPlayer) event.getPlayer();
         if (!PvPFightMod.getFightManager().isPlayerInFight(sp)) return;
-
-        ItemEntity item = event.getEntity();
-        ArenaData arena = PvPFightMod.getFightManager().getArenaForItem(item);
-        if (arena == null || !arena.isInside(item.blockPosition())) {
-            event.setCanceled(true);
-            sp.sendSystemMessage(net.minecraft.network.chat.Component.literal("§7You cannot throw items outside the arena."));
-            LOGGER.debug("[FightProtections] Deleted item outside arena bounds from {}", sp.getName().getString());
-        }
+        event.setCanceled(true);
+        event.getEntity().discard();
+        sp.sendSystemMessage(net.minecraft.network.chat.Component.literal("§7You cannot throw items outside the arena."));
+        LOGGER.debug("[FightProtections] Deleted item outside arena bounds from {}", sp.getName().getString());
     }
 
     /** Prevents player death screen from triggering (since we handle 1 HP logic). */
@@ -88,6 +90,14 @@ public class FightProtections {
         }
     }
 
+    @SubscribeEvent
+    public static void onJoinLevel(EntityJoinLevelEvent e){
+        if(e.getLevel().isClientSide()) return;
+        if(!(e.getEntity() instanceof ServerPlayer p)) return;
+        if(InventoryStash.hasStash(p))
+            InventoryStash.restoreFromPlayerTag(p);
+    }
+
     /** Ensures player is removed cleanly when disconnecting during a fight. */
     @SubscribeEvent
     public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
@@ -95,11 +105,8 @@ public class FightProtections {
         if (PvPFightMod.getFightManager().isPlayerInFight(sp)) {
             PvPFightMod.getFightManager().onPlayerDisconnect(sp);
         }
-    }
 
-    // =====================================================
-    // === NEW: Block Break / Place Protection
-    // =====================================================
+    }
 
     @SubscribeEvent
     public static void onBlockBreak(BlockEvent.BreakEvent event) {
@@ -120,9 +127,6 @@ public class FightProtections {
         }
     }
 
-    // =====================================================
-    // === Combined Player Tick Handler (Freeze + Bounds)
-    // =====================================================
     @SubscribeEvent
     public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;

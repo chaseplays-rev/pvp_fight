@@ -1,10 +1,14 @@
 package com.example.pvpfight;
 
 import com.mojang.logging.LogUtils;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import org.slf4j.Logger;
 import java.util.*;
@@ -136,12 +140,12 @@ public class FightManager {
     private void startTeleportAndCountdown(ServerPlayer p1, ServerPlayer p2, ArenaData arena) {
         MinecraftServer server = p1.server;
 
-        InventoryStash.saveToPlayerTag(p1);
-        InventoryStash.saveToPlayerTag(p2);
-
         ActiveFight fight = new ActiveFight(p1, p2, arena);
         activeFights.put(p1.getUUID(), fight);
         activeFights.put(p2.getUUID(), fight);
+
+        InventoryStash.saveToPlayerTag(p1);
+        InventoryStash.saveToPlayerTag(p2);
 
         p1.teleportTo(p1.serverLevel(),
                 arena.getSpawn1().getX() + 0.5, arena.getSpawn1().getY(), arena.getSpawn1().getZ() + 0.5,
@@ -365,4 +369,5 @@ public class FightManager {
             }
         });
     }
+
 }
