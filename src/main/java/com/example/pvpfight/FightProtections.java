@@ -1,6 +1,7 @@
 package com.example.pvpfight;
 
 import com.mojang.logging.LogUtils;
+import net.minecraft.ChatFormatting;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -8,11 +9,13 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.GameType;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.event.entity.item.ItemTossEvent;
 import net.minecraftforge.event.entity.living.LivingAttackEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.entity.player.PlayerEvent;
+import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.event.entity.player.PlayerContainerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -69,7 +72,6 @@ public class FightProtections {
         ArenaData arena = PvPFightMod.getFightManager().getArenaForItem(item);
         if (arena == null || !arena.isInside(item.blockPosition())) {
             event.setCanceled(true);
-            item.discard();
             sp.sendSystemMessage(net.minecraft.network.chat.Component.literal("§7You cannot throw items outside the arena."));
             LOGGER.debug("[FightProtections] Deleted item outside arena bounds from {}", sp.getName().getString());
         }
@@ -195,47 +197,14 @@ public class FightProtections {
             PvPFightMod.getFightManager().getActiveFightFor(player)
         );
     }
-    // =====================================================
-    // === Global Tag Cleanup (anti-dupe)
-    // =====================================================
-
     @SubscribeEvent
     public static void onContainerOpenCleanup(PlayerContainerEvent.Open event) {
         if (!(event.getEntity() instanceof ServerPlayer sp)) return;
+        if (PvPFightMod.getFightManager().isPlayerInFight(sp)) {
+            sp.closeContainer();
+            sp.displayClientMessage(Component.literal("§cYou cannot open this while in a fight!"), true);
 
-        int removed = 0;
-        final String TAG_KEY = "pvpfight_session";
-
-        // check main inventory
-        for (ItemStack stack : sp.getInventory().items)
-            if (hasFightTag(stack, TAG_KEY)) { stack.setCount(0); removed++; }
-
-        // armor
-        for (ItemStack stack : sp.getInventory().armor)
-            if (hasFightTag(stack, TAG_KEY)) { stack.setCount(0); removed++; }
-
-        // offhand
-        for (ItemStack stack : sp.getInventory().offhand)
-            if (hasFightTag(stack, TAG_KEY)) { stack.setCount(0); removed++; }
-
-        // opened container slots
-        for (Slot slot : event.getContainer().slots) {
-            ItemStack s = slot.getItem();
-            if (hasFightTag(s, TAG_KEY)) {
-                slot.set(ItemStack.EMPTY);
-                removed++;
-            }
-        }
-
-        if (removed > 0) {
-            sp.inventoryMenu.broadcastChanges();
-            sp.displayClientMessage(Component.literal("§cIllegal PvPFight items were removed!"), true);
-            LOGGER.warn("[PvPFight] Removed {} tagged items from {}", removed, sp.getName().getString());
         }
     }
 
-    private static boolean hasFightTag(ItemStack stack, String key) {
-        if (stack == null || stack.isEmpty()) return false;
-        return stack.hasTag() && stack.getTag().contains(key);
-    }
 }

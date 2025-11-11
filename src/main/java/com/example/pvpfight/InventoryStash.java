@@ -7,7 +7,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 
 public final class InventoryStash {
-    // Use your own modid namespace
     private static final String ROOT_KEY   = "pvp_fight:inv_stash";
     private static final String ITEMS_KEY  = "Items";
     private static final String ARMOR_KEY  = "Armor";
@@ -54,15 +53,11 @@ public final class InventoryStash {
             ContainerHelper.loadAllItems(stash.getCompound(OFF_KEY), offhand);
         }
 
-        player.getInventory().setChanged();
+        player.inventoryMenu.broadcastChanges();
+        clearStash(root);
     }
 
-    public static void clearStash(Player player) {
-        CompoundTag root = player.getPersistentData();
+    public static void clearStash(CompoundTag root) {
         root.remove(ROOT_KEY);
-    }
-
-    public static boolean hasStash(Player player) {
-        return player.getPersistentData().contains(ROOT_KEY);
     }
 }

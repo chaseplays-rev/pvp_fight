@@ -153,9 +153,6 @@ public class FightManager {
         Util.announceToAll(server, "§6" + p1.getName().getString() + " §7and §6" + p2.getName().getString() +
                 " §7entered arena §e" + arena.getName());
 
-        // Tag fight items for duplication tracking
-        tagFightItems(p1, p2);
-
         setFrozen(p1, true);
         setFrozen(p2, true);
 
@@ -202,15 +199,8 @@ public class FightManager {
         Util.sendMessage(p1, "§eThe fight has ended!");
         Util.sendMessage(p2, "§eThe fight has ended!");
 
-
-        var snap1 = savedInventories.remove(p1.getUUID());
-        var snap2 = savedInventories.remove(p2.getUUID());
-        restoreWithDedup(p1, snap1);
-        restoreWithDedup(p2, snap2);
-
-        // Deduplicate and clear tags before rewards
-        clearFightTags(p1);
-        clearFightTags(p2);
+        InventoryStash.restoreFromPlayerTag(p1);
+        InventoryStash.restoreFromPlayerTag(p2);
 
         rewardPlayers(p1, p2);
 
@@ -281,10 +271,6 @@ public class FightManager {
     public boolean isPlayerInFight(ServerPlayer player) {
         return player != null && activeFights.containsKey(player.getUUID());
     }
-    public boolean isPlayerInFight(UUID playerId) {
-        return playerId != null && activeFights.containsKey(playerId);
-    }
-
     public ActiveFight getActiveFightFor(ServerPlayer player) {
         if (player == null) return null;
         ActiveFight f = activeFights.get(player.getUUID());
@@ -378,109 +364,5 @@ public class FightManager {
                 player.drop(stack, false);
             }
         });
-    }
-
-    // =====================================================
-    // === Fight Item Tag Protection System
-    // =====================================================
-
-    private static final String FIGHT_TAG = "pvpfight_session";
-
-    /** Safely gets all items from a player's Ender Chest via public API. */
-    private List<ItemStack> getEnderChestItems(ServerPlayer p) {
-        var ender = p.getEnderChestInventory();
-        List<ItemStack> list = new ArrayList<>();
-        for (int i = 0; i < ender.getContainerSize(); i++) {
-            list.add(ender.getItem(i));
-        }
-        return list;
-    }
-
-    /** Tag all stacks in a bucket with the session id. */
-    private void tagInventory(List<ItemStack> stacks, String sessionId) {
-        for (ItemStack stack : stacks) {
-            if (!stack.isEmpty()) {
-                stack.getOrCreateTag().putString(FIGHT_TAG, sessionId);
-            }
-        }
-    }
-
-    /** Generate a session id and tag BOTH players’ inventories + ender chests. */
-    private String tagFightItems(ServerPlayer... players) {
-        String sessionId = UUID.randomUUID().toString();
-        for (ServerPlayer p : players) {
-            tagInventory(p.getInventory().items,  sessionId);
-            tagInventory(p.getInventory().armor,  sessionId);
-            tagInventory(p.getInventory().offhand, sessionId);
-            tagInventory(getEnderChestItems(p),    sessionId);
-        }
-        return sessionId;
-    }
-
-    /** Extract fight tag from a stack ("" if none). */
-    private String getTag(ItemStack stack) {
-        return stack.hasTag() && stack.getTag().contains(FIGHT_TAG)
-            ? stack.getTag().getString(FIGHT_TAG)
-            : "";
-    }
-
-    /** Collect all fight tags currently present in player’s inv + ender chest. */
-    private Set<String> collectPresentTags(ServerPlayer p) {
-        Set<String> tags = new HashSet<>();
-        for (ItemStack s : p.getInventory().items)   { String t = getTag(s); if (!t.isEmpty()) tags.add(t); }
-        for (ItemStack s : getEnderChestItems(p))     { String t = getTag(s); if (!t.isEmpty()) tags.add(t); }
-        for (ItemStack s : p.getInventory().armor)    { String t = getTag(s); if (!t.isEmpty()) tags.add(t); }
-        for (ItemStack s : p.getInventory().offhand)  { String t = getTag(s); if (!t.isEmpty()) tags.add(t); }
-        return tags;
-    }
-
-    /** Remove PvPFight tags from the player’s items after we’re done. */
-    private void clearFightTags(ServerPlayer p) {
-        for (ItemStack s : p.getInventory().items)   if (s.hasTag()) s.getTag().remove(FIGHT_TAG);
-        for (ItemStack s : p.getInventory().armor)   if (s.hasTag()) s.getTag().remove(FIGHT_TAG);
-        for (ItemStack s : p.getInventory().offhand) if (s.hasTag()) s.getTag().remove(FIGHT_TAG);
-        for (ItemStack s : getEnderChestItems(p))    if (s.hasTag()) s.getTag().remove(FIGHT_TAG);
-    }
-    private void restoreWithDedup(ServerPlayer p, InventorySnapshot snap) {
-        if (snap == null) return;
-
-        // Gather all tagged items that exist *now* (before we overwrite inventory).
-        Set<String> existingTags = collectPresentTags(p);
-
-        // Completely reset the inventory, then restore slot-by-slot when safe.
-        var inv = p.getInventory();
-        inv.clearContent();
-
-        // main items
-        for (int i = 0; i < snap.items.size(); i++) {
-            ItemStack s = snap.items.get(i);
-            String tag = getTag(s);
-            if (!tag.isEmpty() && existingTags.contains(tag)) {
-                // Skip: the original stack is already somewhere (e.g., ender chest)
-                continue;
-            }
-            inv.setItem(i, s.copy());
-        }
-
-        // armor
-        for (int i = 0; i < snap.armor.size(); i++) {
-            ItemStack s = snap.armor.get(i);
-            String tag = getTag(s);
-            if (!tag.isEmpty() && existingTags.contains(tag)) continue;
-            inv.armor.set(i, s.copy());
-        }
-
-        // offhand
-        for (int i = 0; i < snap.offhand.size(); i++) {
-            ItemStack s = snap.offhand.get(i);
-            String tag = getTag(s);
-            if (!tag.isEmpty() && existingTags.contains(tag)) continue;
-            inv.offhand.set(i, s.copy());
-        }
-
-        p.inventoryMenu.broadcastChanges();
-
-        // Finally, clear session tags everywhere so items are normal again.
-        clearFightTags(p);
     }
 }
