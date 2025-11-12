@@ -10,6 +10,8 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.dimension.DimensionType;
 import org.slf4j.Logger;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -139,13 +141,19 @@ public class FightManager {
 
     private void startTeleportAndCountdown(ServerPlayer p1, ServerPlayer p2, ArenaData arena) {
         MinecraftServer server = p1.server;
-
         ActiveFight fight = new ActiveFight(p1, p2, arena);
         activeFights.put(p1.getUUID(), fight);
         activeFights.put(p2.getUUID(), fight);
 
         InventoryStash.saveToPlayerTag(p1);
         InventoryStash.saveToPlayerTag(p2);
+
+        if(!p1.level().dimension().equals(Level.OVERWORLD)) {
+            p1.changeDimension(Objects.requireNonNull(server.getLevel(Level.OVERWORLD)));
+        }
+        if(!p2.level().dimension().equals(Level.OVERWORLD)) {
+            p2.changeDimension(Objects.requireNonNull(server.getLevel(Level.OVERWORLD)));
+        }
 
         p1.teleportTo(p1.serverLevel(),
                 arena.getSpawn1().getX() + 0.5, arena.getSpawn1().getY(), arena.getSpawn1().getZ() + 0.5,
